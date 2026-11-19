@@ -14,7 +14,7 @@ public final class SameAccountTransferException extends BankingException {
         this.accountId = accountId;
     }
 
-    public AccountId accountId() {
+    public AccountId getAccountId() {
         return accountId;
     }
 }

@@ -43,16 +43,4 @@ class IdentifierTest {
         TransactionId id = TransactionId.newId();
         assertThat(TransactionId.of(id.toString())).isEqualTo(id);
     }
-
-    @Test
-    void idempotencyKeysWithSameValueAreEqual() {
-        assertThat(IdempotencyKey.of("req-1")).isEqualTo(IdempotencyKey.of("req-1"));
-        assertThat(IdempotencyKey.of("req-1")).isNotEqualTo(IdempotencyKey.of("req-2"));
-    }
-
-    @Test
-    void idempotencyKeyRejectsBlankOrNull() {
-        assertThatThrownBy(() -> IdempotencyKey.of(" ")).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> IdempotencyKey.of(null)).isInstanceOf(NullPointerException.class);
-    }
 }

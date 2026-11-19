@@ -21,15 +21,15 @@ public final class InsufficientFundsException extends BankingException {
         this.requested = requested;
     }
 
-    public AccountId accountId() {
+    public AccountId getAccountId() {
         return accountId;
     }
 
-    public Money balance() {
+    public Money getBalance() {
         return balance;
     }
 
-    public Money requested() {
+    public Money getRequested() {
         return requested;
     }
 }

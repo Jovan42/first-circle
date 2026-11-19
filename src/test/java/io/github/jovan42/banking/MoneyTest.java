@@ -42,9 +42,35 @@ class MoneyTest {
         }
 
         @Test
+        void createsFromBigDecimal() {
+            assertThat(Money.of(new BigDecimal("10.5"), EUR)).isEqualTo(Money.of("10.50", EUR));
+        }
+
+        @Test
+        void acceptsScientificNotation() {
+            assertThat(Money.of(new BigDecimal("1E+2"), EUR)).isEqualTo(Money.of("100.00", EUR));
+        }
+
+        @Test
+        void acceptsTrailingZerosBeyondCurrencyScale() {
+            assertThat(Money.of("10.000000", EUR)).isEqualTo(Money.of("10", EUR));
+        }
+
+        @Test
         void allowsZero() {
             assertThat(Money.zero(EUR).isZero()).isTrue();
             assertThat(Money.zero(EUR).isPositive()).isFalse();
+        }
+
+        @Test
+        void treatsNegativeZeroAsZero() {
+            assertThat(Money.of("-0.00", EUR)).isEqualTo(Money.zero(EUR));
+        }
+
+        @Test
+        void positiveAmountIsPositive() {
+            assertThat(Money.of("0.01", EUR).isPositive()).isTrue();
+            assertThat(Money.of("0.01", EUR).isZero()).isFalse();
         }
 
         @Test
@@ -135,6 +161,14 @@ class MoneyTest {
         void avoidsFloatingPointErrors() {
             assertThat(Money.of("0.10", EUR).plus(Money.of("0.20", EUR)))
                     .isEqualTo(Money.of("0.30", EUR));
+        }
+
+        @Test
+        void rejectsNullOperand() {
+            Money ten = Money.of("10", EUR);
+            assertThatThrownBy(() -> ten.plus(null)).isInstanceOf(NullPointerException.class);
+            assertThatThrownBy(() -> ten.minus(null)).isInstanceOf(NullPointerException.class);
+            assertThatThrownBy(() -> ten.isLessThan(null)).isInstanceOf(NullPointerException.class);
         }
 
         @Test
