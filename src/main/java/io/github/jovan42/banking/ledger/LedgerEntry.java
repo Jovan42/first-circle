@@ -1,5 +1,8 @@
-package io.github.jovan42.banking;
+package io.github.jovan42.banking.ledger;
 
+import io.github.jovan42.banking.domain.AccountId;
+import io.github.jovan42.banking.domain.Money;
+import io.github.jovan42.banking.domain.TransactionId;
 import io.github.jovan42.banking.exception.CurrencyMismatchException;
 import io.github.jovan42.banking.exception.InvalidAmountException;
 import java.time.Instant;

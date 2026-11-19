@@ -1,5 +1,6 @@
-package io.github.jovan42.banking;
+package io.github.jovan42.banking.ledger;
 
+import io.github.jovan42.banking.domain.AccountId;
 import java.util.List;
 import java.util.Objects;
 import java.util.Queue;
@@ -12,7 +13,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * <p>Entries for one account are appended while that account's lock is held, so their order
  * matches the order the balance changed.
  */
-final class InMemoryLedger implements Ledger {
+public final class InMemoryLedger implements Ledger {
 
     private final ConcurrentHashMap<AccountId, Queue<LedgerEntry>> entriesByAccount =
             new ConcurrentHashMap<>();

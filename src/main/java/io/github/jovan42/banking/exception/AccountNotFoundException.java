@@ -1,6 +1,6 @@
 package io.github.jovan42.banking.exception;
 
-import io.github.jovan42.banking.AccountId;
+import io.github.jovan42.banking.domain.AccountId;
 
 /**
  * Thrown when an operation refers to an account that does not exist.

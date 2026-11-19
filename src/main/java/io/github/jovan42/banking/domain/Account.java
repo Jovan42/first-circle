@@ -1,4 +1,4 @@
-package io.github.jovan42.banking;
+package io.github.jovan42.banking.domain;
 
 import io.github.jovan42.banking.exception.CurrencyMismatchException;
 import io.github.jovan42.banking.exception.InsufficientFundsException;
@@ -13,12 +13,14 @@ import java.util.concurrent.locks.ReentrantLock;
  * <p>Thread-safe: every read and write of the balance happens while holding the account's lock,
  * so a balance check and the update that depends on it are atomic (no check-then-act race).
  *
- * <p>The lock is reentrant and exposed to the package so that a transfer can hold the locks of
- * both accounts at once and still call {@link #deposit} / {@link #withdraw}.
+ * <p>The lock is reentrant and exposed so that a transfer can hold the locks of both accounts
+ * at once and still call {@link #deposit} / {@link #withdraw}.
  *
- * <p>Package-private: callers interact with accounts through the service, never directly.
+ * <p>Intended to be used through the account service, which also records every change in the
+ * ledger. Calling {@link #deposit} / {@link #withdraw} directly changes the balance without a
+ * ledger entry.
  */
-final class Account {
+public final class Account {
 
     private final AccountId id;
     private final Currency currency;
@@ -37,23 +39,23 @@ final class Account {
      * Opens an account whose currency is taken from the initial deposit.
      * A zero initial deposit is allowed; negative amounts cannot be expressed as {@link Money}.
      */
-    static Account open(AccountId id, Money initialDeposit) {
+    public static Account open(AccountId id, Money initialDeposit) {
         return new Account(id, initialDeposit);
     }
 
-    AccountId getId() {
+    public AccountId getId() {
         return id;
     }
 
-    Currency getCurrency() {
+    public Currency getCurrency() {
         return currency;
     }
 
-    ReentrantLock getLock() {
+    public ReentrantLock getLock() {
         return lock;
     }
 
-    Money getBalance() {
+    public Money getBalance() {
         lock.lock();
         try {
             return balance;
@@ -69,7 +71,7 @@ final class Account {
      * @throws InvalidAmountException    if the amount is not positive
      * @throws CurrencyMismatchException if the amount is not in the account's currency
      */
-    Money deposit(Money amount) {
+    public Money deposit(Money amount) {
         validate(amount);
         lock.lock();
         try {
@@ -89,7 +91,7 @@ final class Account {
      * @throws InsufficientFundsException if the balance is lower than the amount;
      *                                    the balance is left unchanged
      */
-    Money withdraw(Money amount) {
+    public Money withdraw(Money amount) {
         validate(amount);
         lock.lock();
         try {

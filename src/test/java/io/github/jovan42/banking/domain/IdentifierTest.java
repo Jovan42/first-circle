@@ -1,4 +1,4 @@
-package io.github.jovan42.banking;
+package io.github.jovan42.banking.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

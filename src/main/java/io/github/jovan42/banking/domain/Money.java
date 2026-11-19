@@ -1,4 +1,4 @@
-package io.github.jovan42.banking;
+package io.github.jovan42.banking.domain;
 
 import io.github.jovan42.banking.exception.CurrencyMismatchException;
 import io.github.jovan42.banking.exception.InvalidAmountException;

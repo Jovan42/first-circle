@@ -1,5 +1,6 @@
-package io.github.jovan42.banking;
+package io.github.jovan42.banking.ledger;
 
+import io.github.jovan42.banking.domain.AccountId;
 import java.util.List;
 
 /**
@@ -7,7 +8,7 @@ import java.util.List;
  *
  * <p>Entries can only be added, never changed or removed. Implementations must be thread-safe.
  */
-interface Ledger {
+public interface Ledger {
 
     void append(LedgerEntry entry);
 

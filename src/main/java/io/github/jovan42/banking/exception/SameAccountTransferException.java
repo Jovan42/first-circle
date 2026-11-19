@@ -1,6 +1,6 @@
 package io.github.jovan42.banking.exception;
 
-import io.github.jovan42.banking.AccountId;
+import io.github.jovan42.banking.domain.AccountId;
 
 /**
  * Thrown when a transfer names the same account as source and destination.

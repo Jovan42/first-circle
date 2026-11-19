@@ -1,7 +1,7 @@
 package io.github.jovan42.banking.exception;
 
-import io.github.jovan42.banking.AccountId;
-import io.github.jovan42.banking.Money;
+import io.github.jovan42.banking.domain.AccountId;
+import io.github.jovan42.banking.domain.Money;
 
 /**
  * Thrown when a withdrawal or transfer would take an account below zero.

@@ -1,4 +1,4 @@
-package io.github.jovan42.banking;
+package io.github.jovan42.banking.domain;
 
 import java.util.Objects;
 import java.util.UUID;
