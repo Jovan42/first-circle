@@ -183,20 +183,25 @@ class AccountTest {
             int depositsPerThread = 500;
             Account account = openWith("0");
             CountDownLatch start = new CountDownLatch(1);
+            List<Future<?>> tasks = new ArrayList<>();
 
             try (ExecutorService pool = Executors.newFixedThreadPool(threads)) {
                 for (int i = 0; i < threads; i++) {
-                    pool.submit(() -> {
+                    tasks.add(pool.submit(() -> {
                         start.await();
                         for (int j = 0; j < depositsPerThread; j++) {
                             account.deposit(eur("0.01"));
                         }
                         return null;
-                    });
+                    }));
                 }
                 start.countDown();
             }
 
+            // Rethrows any unexpected exception from a worker thread.
+            for (Future<?> task : tasks) {
+                task.get();
+            }
             // 20 * 500 * 0.01 = 100.00
             assertThat(account.getBalance()).isEqualTo(eur("100.00"));
         }

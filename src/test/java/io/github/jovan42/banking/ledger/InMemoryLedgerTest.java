@@ -7,11 +7,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 
 class InMemoryLedgerTest {
@@ -94,20 +96,25 @@ class InMemoryLedgerTest {
         int entriesPerThread = 500;
         AccountId shared = AccountId.newId();
         CountDownLatch start = new CountDownLatch(1);
+        List<Future<?>> tasks = new ArrayList<>();
 
         try (ExecutorService pool = Executors.newFixedThreadPool(threads)) {
             for (int i = 0; i < threads; i++) {
-                pool.submit(() -> {
+                tasks.add(pool.submit(() -> {
                     start.await();
                     for (int j = 0; j < entriesPerThread; j++) {
                         ledger.append(deposit(shared, "1", "1"));
                     }
                     return null;
-                });
+                }));
             }
             start.countDown();
         }
 
+        // Rethrows any unexpected exception from a worker thread.
+        for (Future<?> task : tasks) {
+            task.get();
+        }
         assertThat(ledger.entriesFor(shared)).hasSize(threads * entriesPerThread);
     }
 }
