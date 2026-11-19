@@ -65,17 +65,60 @@ public final class Account {
     }
 
     /**
-     * Adds {@code amount} to the balance.
+     * Runs every check a deposit would run and returns the balance it would produce,
+     * without changing anything.
      *
-     * @return the new balance
-     * @throws InvalidAmountException    if the amount is not positive
+     * <p>The result stays valid only while the caller holds this account's lock; otherwise
+     * another thread may change the balance in between.
+     *
+     * @throws InvalidAmountException    if the amount is null or not positive
      * @throws CurrencyMismatchException if the amount is not in the account's currency
      */
-    public Money deposit(Money amount) {
+    public Money previewDeposit(Money amount) {
         validate(amount);
         lock.lock();
         try {
-            balance = balance.plus(amount);
+            return balance.plus(amount);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Runs every check a withdrawal would run and returns the balance it would produce,
+     * without changing anything.
+     *
+     * <p>The result stays valid only while the caller holds this account's lock; otherwise
+     * another thread may change the balance in between.
+     *
+     * @throws InvalidAmountException     if the amount is null or not positive
+     * @throws CurrencyMismatchException  if the amount is not in the account's currency
+     * @throws InsufficientFundsException if the balance is lower than the amount
+     */
+    public Money previewWithdrawal(Money amount) {
+        validate(amount);
+        lock.lock();
+        try {
+            if (balance.isLessThan(amount)) {
+                throw new InsufficientFundsException(id, balance, amount);
+            }
+            return balance.minus(amount);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * Adds {@code amount} to the balance.
+     *
+     * @return the new balance
+     * @throws InvalidAmountException    if the amount is null or not positive
+     * @throws CurrencyMismatchException if the amount is not in the account's currency
+     */
+    public Money deposit(Money amount) {
+        lock.lock();
+        try {
+            balance = previewDeposit(amount);
             return balance;
         } finally {
             lock.unlock();
@@ -86,19 +129,15 @@ public final class Account {
      * Removes {@code amount} from the balance. Overdrafts are not allowed.
      *
      * @return the new balance
-     * @throws InvalidAmountException     if the amount is not positive
+     * @throws InvalidAmountException     if the amount is null or not positive
      * @throws CurrencyMismatchException  if the amount is not in the account's currency
      * @throws InsufficientFundsException if the balance is lower than the amount;
      *                                    the balance is left unchanged
      */
     public Money withdraw(Money amount) {
-        validate(amount);
         lock.lock();
         try {
-            if (balance.isLessThan(amount)) {
-                throw new InsufficientFundsException(id, balance, amount);
-            }
-            balance = balance.minus(amount);
+            balance = previewWithdrawal(amount);
             return balance;
         } finally {
             lock.unlock();

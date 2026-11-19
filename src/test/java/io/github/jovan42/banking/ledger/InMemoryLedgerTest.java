@@ -87,7 +87,33 @@ class InMemoryLedgerTest {
     @Test
     void rejectsNulls() {
         assertThatThrownBy(() -> ledger.append(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> ledger.appendAll(null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> ledger.entriesFor(null)).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void appendAllRecordsEveryEntryInOrder() {
+        AccountId a = AccountId.newId();
+        AccountId b = AccountId.newId();
+        LedgerEntry first = deposit(a, "10", "10");
+        LedgerEntry second = deposit(b, "20", "20");
+        LedgerEntry third = deposit(a, "5", "15");
+
+        ledger.appendAll(List.of(first, second, third));
+
+        assertThat(ledger.entriesFor(a)).containsExactly(first, third);
+        assertThat(ledger.entriesFor(b)).containsExactly(second);
+    }
+
+    @Test
+    void appendAllWithANullEntryRecordsNothing() {
+        AccountId a = AccountId.newId();
+        List<LedgerEntry> withNull = new ArrayList<>();
+        withNull.add(deposit(a, "10", "10"));
+        withNull.add(null);
+
+        assertThatThrownBy(() -> ledger.appendAll(withNull)).isInstanceOf(NullPointerException.class);
+        assertThat(ledger.entriesFor(a)).isEmpty();
     }
 
     @Test

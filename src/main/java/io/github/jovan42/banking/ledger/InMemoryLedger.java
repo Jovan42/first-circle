@@ -26,6 +26,18 @@ public final class InMemoryLedger implements Ledger {
                 .add(entry);
     }
 
+    /**
+     * Validates every entry before adding any, so an invalid list records nothing.
+     * Once validated, adding to in-memory queues cannot fail.
+     */
+    @Override
+    public void appendAll(List<LedgerEntry> entries) {
+        // List.copyOf rejects a null list and null elements up front.
+        for (LedgerEntry entry : List.copyOf(entries)) {
+            append(entry);
+        }
+    }
+
     @Override
     public List<LedgerEntry> entriesFor(AccountId accountId) {
         Objects.requireNonNull(accountId, "accountId");

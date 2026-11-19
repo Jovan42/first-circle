@@ -13,6 +13,12 @@ public interface Ledger {
     void append(LedgerEntry entry);
 
     /**
+     * Appends several entries as one unit, in order: either all of them are recorded or none is.
+     * Used for transfers, whose two sides must never be recorded separately.
+     */
+    void appendAll(List<LedgerEntry> entries);
+
+    /**
      * Returns the entries for an account, oldest first, as an immutable snapshot.
      * Returns an empty list for an account with no entries.
      */

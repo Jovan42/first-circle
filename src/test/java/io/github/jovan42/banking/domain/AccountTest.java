@@ -143,6 +143,41 @@ class AccountTest {
     }
 
     @Nested
+    class Preview {
+
+        @Test
+        void previewDepositReturnsResultWithoutChangingBalance() {
+            Account account = openWith("100");
+            assertThat(account.previewDeposit(eur("25"))).isEqualTo(eur("125"));
+            assertThat(account.getBalance()).isEqualTo(eur("100"));
+        }
+
+        @Test
+        void previewWithdrawalReturnsResultWithoutChangingBalance() {
+            Account account = openWith("100");
+            assertThat(account.previewWithdrawal(eur("30"))).isEqualTo(eur("70"));
+            assertThat(account.getBalance()).isEqualTo(eur("100"));
+        }
+
+        @Test
+        void previewWithdrawalRunsOverdraftCheck() {
+            Account account = openWith("100");
+            assertThatThrownBy(() -> account.previewWithdrawal(eur("100.01")))
+                    .isInstanceOf(InsufficientFundsException.class);
+            assertThat(account.getBalance()).isEqualTo(eur("100"));
+        }
+
+        @Test
+        void previewRunsSameValidationAsTheRealOperation() {
+            Account account = openWith("100");
+            assertThatThrownBy(() -> account.previewDeposit(null)).isInstanceOf(InvalidAmountException.class);
+            assertThatThrownBy(() -> account.previewDeposit(eur("0"))).isInstanceOf(InvalidAmountException.class);
+            assertThatThrownBy(() -> account.previewWithdrawal(Money.of("1", USD)))
+                    .isInstanceOf(CurrencyMismatchException.class);
+        }
+    }
+
+    @Nested
     class Concurrency {
 
         @Test
