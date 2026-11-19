@@ -1,11 +1,11 @@
 package io.github.jovan42.banking.ledger;
 
-import io.github.jovan42.banking.domain.AccountId;
-import io.github.jovan42.banking.domain.Money;
-import io.github.jovan42.banking.domain.TransactionId;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.jovan42.banking.domain.AccountId;
+import io.github.jovan42.banking.domain.Money;
+import io.github.jovan42.banking.domain.TransactionId;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Currency;

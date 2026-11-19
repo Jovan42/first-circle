@@ -1,10 +1,10 @@
 package io.github.jovan42.banking.domain;
 
-import io.github.jovan42.banking.exception.CurrencyMismatchException;
-import io.github.jovan42.banking.exception.InvalidAmountException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.jovan42.banking.exception.CurrencyMismatchException;
+import io.github.jovan42.banking.exception.InvalidAmountException;
 import java.math.BigDecimal;
 import java.util.Currency;
 import org.junit.jupiter.api.Nested;

@@ -1,11 +1,11 @@
 package io.github.jovan42.banking.repository;
 
-import io.github.jovan42.banking.domain.Account;
-import io.github.jovan42.banking.domain.AccountId;
-import io.github.jovan42.banking.domain.Money;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.jovan42.banking.domain.Account;
+import io.github.jovan42.banking.domain.AccountId;
+import io.github.jovan42.banking.domain.Money;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;

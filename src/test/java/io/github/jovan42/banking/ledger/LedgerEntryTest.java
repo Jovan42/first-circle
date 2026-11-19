@@ -1,13 +1,13 @@
 package io.github.jovan42.banking.ledger;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import io.github.jovan42.banking.domain.AccountId;
 import io.github.jovan42.banking.domain.Money;
 import io.github.jovan42.banking.domain.TransactionId;
 import io.github.jovan42.banking.exception.CurrencyMismatchException;
 import io.github.jovan42.banking.exception.InvalidAmountException;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
 import java.time.Instant;
 import java.util.Currency;
 import java.util.Optional;

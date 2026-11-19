@@ -1,11 +1,11 @@
 package io.github.jovan42.banking.domain;
 
-import io.github.jovan42.banking.exception.CurrencyMismatchException;
-import io.github.jovan42.banking.exception.InsufficientFundsException;
-import io.github.jovan42.banking.exception.InvalidAmountException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.jovan42.banking.exception.CurrencyMismatchException;
+import io.github.jovan42.banking.exception.InsufficientFundsException;
+import io.github.jovan42.banking.exception.InvalidAmountException;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
