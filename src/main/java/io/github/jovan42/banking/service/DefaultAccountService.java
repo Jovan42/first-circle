@@ -2,10 +2,12 @@ package io.github.jovan42.banking.service;
 
 import io.github.jovan42.banking.domain.Account;
 import io.github.jovan42.banking.domain.AccountId;
+import io.github.jovan42.banking.domain.IdempotencyKey;
 import io.github.jovan42.banking.domain.Money;
 import io.github.jovan42.banking.domain.TransactionId;
 import io.github.jovan42.banking.exception.AccountNotFoundException;
 import io.github.jovan42.banking.exception.CurrencyMismatchException;
+import io.github.jovan42.banking.exception.DuplicateRequestException;
 import io.github.jovan42.banking.exception.InvalidAmountException;
 import io.github.jovan42.banking.exception.SameAccountTransferException;
 import io.github.jovan42.banking.ledger.Ledger;
@@ -15,6 +17,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Default {@link AccountService}: coordinates accounts, the ledger and the clock.
@@ -66,6 +69,36 @@ public final class DefaultAccountService implements AccountService {
 
     @Override
     public TransactionId deposit(AccountId accountId, Money amount) {
+        return deposit(accountId, amount, Optional.empty());
+    }
+
+    @Override
+    public TransactionId deposit(AccountId accountId, Money amount, IdempotencyKey key) {
+        return deposit(accountId, amount, Optional.of(key));
+    }
+
+    @Override
+    public TransactionId withdraw(AccountId accountId, Money amount) {
+        return withdraw(accountId, amount, Optional.empty());
+    }
+
+    @Override
+    public TransactionId withdraw(AccountId accountId, Money amount, IdempotencyKey key) {
+        return withdraw(accountId, amount, Optional.of(key));
+    }
+
+    @Override
+    public TransactionId transfer(AccountId fromAccountId, AccountId toAccountId, Money amount) {
+        return transfer(fromAccountId, toAccountId, amount, Optional.empty());
+    }
+
+    @Override
+    public TransactionId transfer(AccountId fromAccountId, AccountId toAccountId, Money amount, IdempotencyKey key) {
+        return transfer(fromAccountId, toAccountId, amount, Optional.of(key));
+    }
+
+    private TransactionId deposit(AccountId accountId, Money amount, Optional<IdempotencyKey> key) {
+        rejectIfAlreadyProcessed(key);
         Account account = find(accountId);
         TransactionId txId = TransactionId.newId();
         Instant now = clock.instant();
@@ -73,7 +106,7 @@ public final class DefaultAccountService implements AccountService {
         account.getLock().lock();
         try {
             Money balanceAfter = account.previewDeposit(amount);      // 1. every check, no change
-            ledger.append(LedgerEntry.deposit(txId, accountId, amount, balanceAfter, now));  // 2. record
+            ledger.append(tag(LedgerEntry.deposit(txId, accountId, amount, balanceAfter, now), key));  // 2. record
             account.deposit(amount);                                   // 3. apply; cannot fail now
             return txId;
         } finally {
@@ -81,8 +114,8 @@ public final class DefaultAccountService implements AccountService {
         }
     }
 
-    @Override
-    public TransactionId withdraw(AccountId accountId, Money amount) {
+    private TransactionId withdraw(AccountId accountId, Money amount, Optional<IdempotencyKey> key) {
+        rejectIfAlreadyProcessed(key);
         Account account = find(accountId);
         TransactionId txId = TransactionId.newId();
         Instant now = clock.instant();
@@ -90,7 +123,7 @@ public final class DefaultAccountService implements AccountService {
         account.getLock().lock();
         try {
             Money balanceAfter = account.previewWithdrawal(amount);   // 1. every check, no change
-            ledger.append(LedgerEntry.withdrawal(txId, accountId, amount, balanceAfter, now));  // 2. record
+            ledger.append(tag(LedgerEntry.withdrawal(txId, accountId, amount, balanceAfter, now), key));  // 2. record
             account.withdraw(amount);                                  // 3. apply; cannot fail now
             return txId;
         } finally {
@@ -98,8 +131,9 @@ public final class DefaultAccountService implements AccountService {
         }
     }
 
-    @Override
-    public TransactionId transfer(AccountId fromAccountId, AccountId toAccountId, Money amount) {
+    private TransactionId transfer(
+            AccountId fromAccountId, AccountId toAccountId, Money amount, Optional<IdempotencyKey> key) {
+        rejectIfAlreadyProcessed(key);
         Objects.requireNonNull(fromAccountId, "fromAccountId");
         Objects.requireNonNull(toAccountId, "toAccountId");
         if (fromAccountId.equals(toAccountId)) {
@@ -131,8 +165,8 @@ public final class DefaultAccountService implements AccountService {
 
                 // 2. Record both sides as one unit. If this fails, nothing has changed.
                 ledger.appendAll(List.of(
-                        LedgerEntry.transferOut(txId, fromAccountId, toAccountId, amount, fromBalanceAfter, now),
-                        LedgerEntry.transferIn(txId, toAccountId, fromAccountId, amount, toBalanceAfter, now)));
+                        tag(LedgerEntry.transferOut(txId, fromAccountId, toAccountId, amount, fromBalanceAfter, now), key),
+                        tag(LedgerEntry.transferIn(txId, toAccountId, fromAccountId, amount, toBalanceAfter, now), key)));
 
                 // 3. Apply. Every check has passed under the locks, so these cannot fail.
                 from.withdraw(amount);
@@ -155,6 +189,21 @@ public final class DefaultAccountService implements AccountService {
     public List<LedgerEntry> getHistory(AccountId accountId) {
         find(accountId);  // unknown accounts are an error, not an empty history
         return ledger.entriesFor(accountId);
+    }
+
+    /**
+     * Fast path: report a retry as a duplicate before any other check. Without this, a retry of a
+     * withdrawal that emptied the account would fail with InsufficientFundsException instead.
+     * The ledger still enforces uniqueness atomically, which covers concurrent duplicates.
+     */
+    private void rejectIfAlreadyProcessed(Optional<IdempotencyKey> key) {
+        key.ifPresent(k -> ledger.findTransaction(k).ifPresent(original -> {
+            throw new DuplicateRequestException(k, original);
+        }));
+    }
+
+    private static LedgerEntry tag(LedgerEntry entry, Optional<IdempotencyKey> key) {
+        return key.map(entry::withIdempotencyKey).orElse(entry);
     }
 
     private Account find(AccountId accountId) {

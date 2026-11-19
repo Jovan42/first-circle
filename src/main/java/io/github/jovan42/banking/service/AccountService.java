@@ -1,10 +1,12 @@
 package io.github.jovan42.banking.service;
 
 import io.github.jovan42.banking.domain.AccountId;
+import io.github.jovan42.banking.domain.IdempotencyKey;
 import io.github.jovan42.banking.domain.Money;
 import io.github.jovan42.banking.domain.TransactionId;
 import io.github.jovan42.banking.exception.AccountNotFoundException;
 import io.github.jovan42.banking.exception.CurrencyMismatchException;
+import io.github.jovan42.banking.exception.DuplicateRequestException;
 import io.github.jovan42.banking.exception.InsufficientFundsException;
 import io.github.jovan42.banking.exception.InvalidAmountException;
 import io.github.jovan42.banking.exception.SameAccountTransferException;
@@ -13,6 +15,9 @@ import java.util.List;
 
 /**
  * Public entry point for banking operations.
+ *
+ * <p>Deposits, withdrawals and transfers have an overload taking an {@link IdempotencyKey}; use
+ * it when a request may be retried (e.g. after a network timeout) so the money moves only once.
  *
  * <p>All methods are thread-safe. Every operation either completes fully or fails with a
  * {@link io.github.jovan42.banking.exception.BankingException} and leaves balances and the ledger
@@ -55,6 +60,30 @@ public interface AccountService {
      * @throws InsufficientFundsException   if the source balance is lower than the amount
      */
     TransactionId transfer(AccountId fromAccountId, AccountId toAccountId, Money amount);
+
+    /**
+     * Same as {@link #deposit(AccountId, Money)}, but safe to retry: the key is recorded in the
+     * ledger with the transaction, and a second request with the same key is rejected.
+     *
+     * @throws DuplicateRequestException if the key was already used by a successful request;
+     *                                   nothing is changed and the exception carries the
+     *                                   original transaction id
+     */
+    TransactionId deposit(AccountId accountId, Money amount, IdempotencyKey key);
+
+    /**
+     * Same as {@link #withdraw(AccountId, Money)}, but safe to retry.
+     *
+     * @throws DuplicateRequestException if the key was already used by a successful request
+     */
+    TransactionId withdraw(AccountId accountId, Money amount, IdempotencyKey key);
+
+    /**
+     * Same as {@link #transfer(AccountId, AccountId, Money)}, but safe to retry.
+     *
+     * @throws DuplicateRequestException if the key was already used by a successful request
+     */
+    TransactionId transfer(AccountId fromAccountId, AccountId toAccountId, Money amount, IdempotencyKey key);
 
     /**
      * @throws AccountNotFoundException if the account does not exist

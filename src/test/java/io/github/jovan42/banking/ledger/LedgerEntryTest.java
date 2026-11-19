@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.jovan42.banking.domain.AccountId;
+import io.github.jovan42.banking.domain.IdempotencyKey;
 import io.github.jovan42.banking.domain.Money;
 import io.github.jovan42.banking.domain.TransactionId;
 import io.github.jovan42.banking.exception.CurrencyMismatchException;
@@ -54,6 +55,22 @@ class LedgerEntryTest {
         }
 
         @Test
+        void factoriesCreateEntriesWithoutIdempotencyKey() {
+            assertThat(LedgerEntry.deposit(tx, a, eur("1"), eur("1"), NOW).idempotencyKey()).isEmpty();
+        }
+
+        @Test
+        void withIdempotencyKeyReturnsTaggedCopy() {
+            LedgerEntry plain = LedgerEntry.deposit(tx, a, eur("1"), eur("1"), NOW);
+            LedgerEntry tagged = plain.withIdempotencyKey(IdempotencyKey.of("req-1"));
+
+            assertThat(tagged.idempotencyKey()).contains(IdempotencyKey.of("req-1"));
+            assertThat(tagged.transactionId()).isEqualTo(plain.transactionId());
+            assertThat(plain.idempotencyKey()).isEmpty();   // original unchanged
+            assertThatThrownBy(() -> plain.withIdempotencyKey(null)).isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
         void transferSidesShareTransactionAndNameEachOther() {
             LedgerEntry out = LedgerEntry.transferOut(tx, a, b, eur("30"), eur("70"), NOW);
             LedgerEntry in = LedgerEntry.transferIn(tx, b, a, eur("30"), eur("80"), NOW);
@@ -79,19 +96,21 @@ class LedgerEntryTest {
             Optional<AccountId> none = Optional.empty();
             EntryType type = EntryType.DEPOSIT;
 
-            assertThatThrownBy(() -> new LedgerEntry(null, a, type, m, m, none, NOW))
+            assertThatThrownBy(() -> new LedgerEntry(null, a, type, m, m, none, NOW, Optional.empty()))
                     .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> new LedgerEntry(tx, null, type, m, m, none, NOW))
+            assertThatThrownBy(() -> new LedgerEntry(tx, null, type, m, m, none, NOW, Optional.empty()))
                     .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> new LedgerEntry(tx, a, null, m, m, none, NOW))
+            assertThatThrownBy(() -> new LedgerEntry(tx, a, null, m, m, none, NOW, Optional.empty()))
                     .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> new LedgerEntry(tx, a, type, null, m, none, NOW))
+            assertThatThrownBy(() -> new LedgerEntry(tx, a, type, null, m, none, NOW, Optional.empty()))
                     .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> new LedgerEntry(tx, a, type, m, null, none, NOW))
+            assertThatThrownBy(() -> new LedgerEntry(tx, a, type, m, null, none, NOW, Optional.empty()))
                     .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> new LedgerEntry(tx, a, type, m, m, null, NOW))
+            assertThatThrownBy(() -> new LedgerEntry(tx, a, type, m, m, null, NOW, Optional.empty()))
                     .isInstanceOf(NullPointerException.class);
-            assertThatThrownBy(() -> new LedgerEntry(tx, a, type, m, m, none, null))
+            assertThatThrownBy(() -> new LedgerEntry(tx, a, type, m, m, none, null, Optional.empty()))
+                    .isInstanceOf(NullPointerException.class);
+            assertThatThrownBy(() -> new LedgerEntry(tx, a, type, m, m, none, NOW, null))
                     .isInstanceOf(NullPointerException.class);
         }
 
@@ -110,22 +129,22 @@ class LedgerEntryTest {
         @Test
         void transferRequiresCounterparty() {
             assertThatThrownBy(() -> new LedgerEntry(
-                    tx, a, EntryType.TRANSFER_OUT, eur("1"), eur("1"), Optional.empty(), NOW))
+                    tx, a, EntryType.TRANSFER_OUT, eur("1"), eur("1"), Optional.empty(), NOW, Optional.empty()))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("requires a counterparty");
             assertThatThrownBy(() -> new LedgerEntry(
-                    tx, a, EntryType.TRANSFER_IN, eur("1"), eur("1"), Optional.empty(), NOW))
+                    tx, a, EntryType.TRANSFER_IN, eur("1"), eur("1"), Optional.empty(), NOW, Optional.empty()))
                     .isInstanceOf(IllegalArgumentException.class);
         }
 
         @Test
         void depositAndWithdrawalRejectCounterparty() {
             assertThatThrownBy(() -> new LedgerEntry(
-                    tx, a, EntryType.DEPOSIT, eur("1"), eur("1"), Optional.of(b), NOW))
+                    tx, a, EntryType.DEPOSIT, eur("1"), eur("1"), Optional.of(b), NOW, Optional.empty()))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("must not have a counterparty");
             assertThatThrownBy(() -> new LedgerEntry(
-                    tx, a, EntryType.WITHDRAWAL, eur("1"), eur("1"), Optional.of(b), NOW))
+                    tx, a, EntryType.WITHDRAWAL, eur("1"), eur("1"), Optional.of(b), NOW, Optional.empty()))
                     .isInstanceOf(IllegalArgumentException.class);
         }
 

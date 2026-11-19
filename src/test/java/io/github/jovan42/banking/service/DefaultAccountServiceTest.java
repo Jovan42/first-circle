@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 import io.github.jovan42.banking.domain.AccountId;
+import io.github.jovan42.banking.domain.IdempotencyKey;
 import io.github.jovan42.banking.domain.Money;
 import io.github.jovan42.banking.domain.TransactionId;
 import io.github.jovan42.banking.exception.AccountNotFoundException;
 import io.github.jovan42.banking.exception.CurrencyMismatchException;
+import io.github.jovan42.banking.exception.DuplicateRequestException;
 import io.github.jovan42.banking.exception.InsufficientFundsException;
 import io.github.jovan42.banking.exception.InvalidAmountException;
 import io.github.jovan42.banking.exception.SameAccountTransferException;
@@ -21,8 +23,15 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
@@ -356,6 +365,151 @@ class DefaultAccountServiceTest {
         }
     }
 
+    @Nested
+    class Idempotency {
+
+        @Test
+        void retriedDepositIsRejectedWithOriginalTransaction() {
+            AccountId a = service.openAccount(eur("100"));
+            TransactionId original = service.deposit(a, eur("10"), key("dep-1"));
+
+            assertThatThrownBy(() -> service.deposit(a, eur("10"), key("dep-1")))
+                    .isInstanceOfSatisfying(DuplicateRequestException.class, e -> {
+                        assertThat(e.getKey()).isEqualTo(key("dep-1"));
+                        assertThat(e.getOriginalTransactionId()).isEqualTo(original);
+                    });
+
+            assertThat(service.getBalance(a)).isEqualTo(eur("110"));
+            assertThat(service.getHistory(a)).hasSize(2);   // opening + one deposit
+        }
+
+        @Test
+        void retriedWithdrawalIsRejected() {
+            AccountId a = service.openAccount(eur("100"));
+            TransactionId original = service.withdraw(a, eur("30"), key("wd-1"));
+
+            assertThatThrownBy(() -> service.withdraw(a, eur("30"), key("wd-1")))
+                    .isInstanceOfSatisfying(DuplicateRequestException.class,
+                            e -> assertThat(e.getOriginalTransactionId()).isEqualTo(original));
+            assertThat(service.getBalance(a)).isEqualTo(eur("70"));
+        }
+
+        @Test
+        void retriedTransferIsRejectedAndBothSidesCarryTheKey() {
+            AccountId a = service.openAccount(eur("100"));
+            AccountId b = service.openAccount(eur("50"));
+            TransactionId original = service.transfer(a, b, eur("30"), key("tr-1"));
+
+            assertThatThrownBy(() -> service.transfer(a, b, eur("30"), key("tr-1")))
+                    .isInstanceOfSatisfying(DuplicateRequestException.class,
+                            e -> assertThat(e.getOriginalTransactionId()).isEqualTo(original));
+
+            assertThat(service.getBalance(a)).isEqualTo(eur("70"));
+            assertThat(service.getBalance(b)).isEqualTo(eur("80"));
+            assertThat(last(service.getHistory(a)).idempotencyKey()).contains(key("tr-1"));
+            assertThat(last(service.getHistory(b)).idempotencyKey()).contains(key("tr-1"));
+        }
+
+        @Test
+        void retryIsReportedAsDuplicateEvenIfItWouldNowFail() {
+            AccountId a = service.openAccount(eur("100"));
+            service.withdraw(a, eur("100"), key("empty-it"));   // balance now 0
+
+            // Without the early check this would be InsufficientFundsException, hiding the real answer.
+            assertThatThrownBy(() -> service.withdraw(a, eur("100"), key("empty-it")))
+                    .isInstanceOf(DuplicateRequestException.class);
+        }
+
+        @Test
+        void keyCannotBeReusedForADifferentRequest() {
+            AccountId a = service.openAccount(eur("100"));
+            AccountId b = service.openAccount(eur("100"));
+            service.deposit(a, eur("10"), key("k"));
+
+            assertThatThrownBy(() -> service.withdraw(b, eur("5"), key("k")))
+                    .isInstanceOf(DuplicateRequestException.class);
+            assertThat(service.getBalance(b)).isEqualTo(eur("100"));
+        }
+
+        @Test
+        void failedRequestDoesNotUseUpTheKey() {
+            AccountId a = service.openAccount(eur("10"));
+
+            assertThatThrownBy(() -> service.withdraw(a, eur("50"), key("wd")))
+                    .isInstanceOf(InsufficientFundsException.class);
+
+            service.deposit(a, eur("40"));                                     // funds arrive
+            service.withdraw(a, eur("50"), key("wd"));                         // same key now succeeds
+            assertThat(service.getBalance(a).isZero()).isTrue();
+        }
+
+        @Test
+        void differentKeysAreSeparateRequests() {
+            AccountId a = service.openAccount(eur("100"));
+            service.deposit(a, eur("10"), key("dep-1"));
+            service.deposit(a, eur("10"), key("dep-2"));
+            assertThat(service.getBalance(a)).isEqualTo(eur("120"));
+        }
+
+        @Test
+        void requestsWithoutKeyAreNotDeduplicated() {
+            AccountId a = service.openAccount(eur("100"));
+            service.deposit(a, eur("10"));
+            service.deposit(a, eur("10"));
+            assertThat(service.getBalance(a)).isEqualTo(eur("120"));
+            assertThat(last(service.getHistory(a)).idempotencyKey()).isEmpty();
+        }
+
+        @Test
+        void rejectsNullKey() {
+            AccountId a = service.openAccount(eur("100"));
+            assertThatThrownBy(() -> service.deposit(a, eur("1"), null)).isInstanceOf(NullPointerException.class);
+        }
+
+        @Test
+        void concurrentRetriesOfSameTransferApplyExactlyOnce() throws Exception {
+            int threads = 50;
+            int rounds = 20;   // races are probabilistic: repeat the race so a bug is near-certain to show
+            AccountId a = service.openAccount(eur("1000"));
+            AccountId b = service.openAccount(eur("0"));
+
+            try (ExecutorService pool = Executors.newFixedThreadPool(threads)) {
+                for (int round = 0; round < rounds; round++) {
+                    IdempotencyKey sameKey = key("request-" + round);
+                    CountDownLatch start = new CountDownLatch(1);
+                    List<Future<TransactionId>> results = new ArrayList<>();
+                    for (int i = 0; i < threads; i++) {
+                        results.add(pool.submit(() -> {
+                            start.await();
+                            return service.transfer(a, b, eur("1"), sameKey);
+                        }));
+                    }
+                    start.countDown();
+
+                    int succeeded = 0;
+                    for (Future<TransactionId> result : results) {
+                        try {
+                            result.get();
+                            succeeded++;
+                        } catch (ExecutionException e) {
+                            assertThat(e.getCause()).isInstanceOf(DuplicateRequestException.class);
+                        }
+                    }
+                    assertThat(succeeded).as("round %d", round).isEqualTo(1);
+                }
+            }
+
+            // Exactly one transfer of 1.00 per round, no matter how many threads sent it.
+            assertThat(service.getBalance(a)).isEqualTo(eur(String.valueOf(1000 - rounds)));
+            assertThat(service.getBalance(b)).isEqualTo(eur(String.valueOf(rounds)));
+            assertThat(service.getHistory(b)).hasSize(rounds);
+        }
+
+        private static IdempotencyKey key(String value) {
+            return IdempotencyKey.of(value);
+        }
+    }
+
     /**
      * Injects failures into the ledger and the clock to prove that a failure at any point
      * leaves balances and history unchanged (there is no rollback, so ordering must guarantee it).
@@ -469,6 +623,11 @@ class DefaultAccountServiceTest {
         @Override
         public List<LedgerEntry> entriesFor(AccountId accountId) {
             return delegate.entriesFor(accountId);
+        }
+
+        @Override
+        public Optional<TransactionId> findTransaction(IdempotencyKey key) {
+            return delegate.findTransaction(key);
         }
     }
 

@@ -1,6 +1,7 @@
 package io.github.jovan42.banking.ledger;
 
 import io.github.jovan42.banking.domain.AccountId;
+import io.github.jovan42.banking.domain.IdempotencyKey;
 import io.github.jovan42.banking.domain.Money;
 import io.github.jovan42.banking.domain.TransactionId;
 import io.github.jovan42.banking.exception.CurrencyMismatchException;
@@ -17,7 +18,8 @@ import java.util.Optional;
  * account as counterparty.
  *
  * <p>Prefer the factory methods ({@link #deposit}, {@link #withdrawal}, {@link #transferOut},
- * {@link #transferIn}); the constructor enforces the same rules.
+ * {@link #transferIn}); the constructor enforces the same rules. Factories create entries without
+ * an idempotency key; use {@link #withIdempotencyKey} to attach one.
  *
  * @param transactionId         the operation this entry belongs to
  * @param accountId             the account whose balance changed
@@ -26,6 +28,8 @@ import java.util.Optional;
  * @param balanceAfter          the account's balance immediately after this change
  * @param counterpartyAccountId the other account in a transfer; empty for deposits and withdrawals
  * @param timestamp             when the change happened
+ * @param idempotencyKey        the client key of the request that caused this change, if any;
+ *                              the ledger refuses to record the same key twice
  */
 public record LedgerEntry(
         TransactionId transactionId,
@@ -34,7 +38,8 @@ public record LedgerEntry(
         Money amount,
         Money balanceAfter,
         Optional<AccountId> counterpartyAccountId,
-        Instant timestamp) {
+        Instant timestamp,
+        Optional<IdempotencyKey> idempotencyKey) {
 
     public LedgerEntry {
         Objects.requireNonNull(transactionId, "transactionId");
@@ -44,6 +49,7 @@ public record LedgerEntry(
         Objects.requireNonNull(balanceAfter, "balanceAfter");
         Objects.requireNonNull(counterpartyAccountId, "counterpartyAccountId");
         Objects.requireNonNull(timestamp, "timestamp");
+        Objects.requireNonNull(idempotencyKey, "idempotencyKey");
 
         if (!amount.isPositive()) {
             throw new InvalidAmountException("Ledger entry amount must be positive: " + amount);
@@ -67,13 +73,13 @@ public record LedgerEntry(
     public static LedgerEntry deposit(
             TransactionId transactionId, AccountId accountId, Money amount, Money balanceAfter, Instant timestamp) {
         return new LedgerEntry(transactionId, accountId, EntryType.DEPOSIT,
-                amount, balanceAfter, Optional.empty(), timestamp);
+                amount, balanceAfter, Optional.empty(), timestamp, Optional.empty());
     }
 
     public static LedgerEntry withdrawal(
             TransactionId transactionId, AccountId accountId, Money amount, Money balanceAfter, Instant timestamp) {
         return new LedgerEntry(transactionId, accountId, EntryType.WITHDRAWAL,
-                amount, balanceAfter, Optional.empty(), timestamp);
+                amount, balanceAfter, Optional.empty(), timestamp, Optional.empty());
     }
 
     /** The debit side of a transfer: money leaving {@code accountId} for {@code toAccountId}. */
@@ -81,7 +87,7 @@ public record LedgerEntry(
             TransactionId transactionId, AccountId accountId, AccountId toAccountId,
             Money amount, Money balanceAfter, Instant timestamp) {
         return new LedgerEntry(transactionId, accountId, EntryType.TRANSFER_OUT,
-                amount, balanceAfter, Optional.of(toAccountId), timestamp);
+                amount, balanceAfter, Optional.of(toAccountId), timestamp, Optional.empty());
     }
 
     /** The credit side of a transfer: money arriving in {@code accountId} from {@code fromAccountId}. */
@@ -89,6 +95,13 @@ public record LedgerEntry(
             TransactionId transactionId, AccountId accountId, AccountId fromAccountId,
             Money amount, Money balanceAfter, Instant timestamp) {
         return new LedgerEntry(transactionId, accountId, EntryType.TRANSFER_IN,
-                amount, balanceAfter, Optional.of(fromAccountId), timestamp);
+                amount, balanceAfter, Optional.of(fromAccountId), timestamp, Optional.empty());
+    }
+
+    /** Returns a copy of this entry tagged with the given idempotency key. */
+    public LedgerEntry withIdempotencyKey(IdempotencyKey key) {
+        Objects.requireNonNull(key, "key");
+        return new LedgerEntry(transactionId, accountId, type, amount, balanceAfter,
+                counterpartyAccountId, timestamp, Optional.of(key));
     }
 }
